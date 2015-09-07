@@ -1,6 +1,6 @@
 " submode - Create your own submodes
-" Version: 0.1.0
-" Copyright (C) 2008-2013 kana <http://whileimautomaton.net/>
+" Version: 0.3.1
+" Copyright (C) 2008-2014 kana <http://whileimautomaton.net/>
 " License: MIT license  {{{
 "     Permission is hereby granted, free of charge, to any person obtaining
 "     a copy of this software and associated documentation files (the
@@ -69,6 +69,10 @@
 
 " Variables  "{{{1
 
+if !exists('g:submode_always_show_submode')
+  let g:submode_always_show_submode = 0
+endif
+
 if !exists('g:submode_keep_leaving_key')
   let g:submode_keep_leaving_key = 0
 endif
@@ -90,6 +94,7 @@ endif
 
 "" See s:set_up_options() and s:restore_options().
 "
+" let s:original_showcmd = &showcmd
 " let s:original_showmode = &showmode
 " let s:original_timeout = &timeout
 " let s:original_timeoutlen = &timeoutlen
@@ -99,6 +104,21 @@ endif
 if !exists('s:options_overridden_p')
   let s:options_overridden_p = 0
 endif
+
+" A padding string to wipe out internal key mappings in 'showcmd' area.  (gh-3)
+"
+" We use no-break spaces (U+00A0) or dots, depending of the current 'encoding'.
+" Because
+"
+" * A normal space (U+0020) is rendered as "<20>" since Vim 7.4.116.
+" * U+00A0 is rendered as an invisible glyph if 'encoding' is set to one of
+"   Unicode encodings.  Otherwise "| " is rendered instead.
+let s:STEALTH_TYPEAHEAD =
+\ &g:encoding =~# '^u'
+\ ? repeat("\<Char-0xa0>", 5)
+\ : repeat('.', 10)
+
+let s:current_submode = ''
 
 
 
@@ -115,6 +135,13 @@ command! -bar -nargs=0 SubmodeRestoreOptions  call submode#restore_options()
 
 
 
+function! submode#current()  "{{{2
+  return s:current_submode
+endfunction
+
+
+
+
 function! submode#enter_with(submode, modes, options, lhs, ...)  "{{{2
   let rhs = 0 < a:0 ? a:1 : '<Nop>'
   for mode in s:each_char(a:modes)
@@ -127,7 +154,8 @@ endfunction
 
 
 function! submode#leave_with(submode, modes, options, lhs)  "{{{2
-  return submode#map(a:submode, a:modes, a:options . 'x', a:lhs, '<Nop>')
+  let options = substitute(a:modes, 'e', '', 'g')  " <Nop> is not expression.
+  return submode#map(a:submode, a:modes, options . 'x', a:lhs, '<Nop>')
 endfunction
 
 
@@ -204,8 +232,10 @@ function! s:define_entering_mapping(submode, mode, options, lhs, rhs)  "{{{2
   \       s:map_options('')
   \       s:named_key_prefix(a:submode)
   \       s:named_key_leave(a:submode)
+  " NB: :map-<expr> cannot be used for s:on_leaving_submode(),
+  "     because it uses some commands not allowed in :map-<expr>.
   execute s:map_command(a:mode, '')
-  \       s:map_options('')
+  \       s:map_options('s')
   \       s:named_key_leave(a:submode)
   \       printf('%s<SID>on_leaving_submode(%s)<Return>',
   \              a:mode =~# '[ic]' ? '<C-r>=' : '@=',
@@ -390,7 +420,7 @@ endfunction
 
 
 function! s:named_key_prefix(submode)  "{{{2
-  return printf('<Plug>(submode-p:%s)', a:submode)
+  return printf('<Plug>(submode-p:%s)%s', a:submode, s:STEALTH_TYPEAHEAD)
 endfunction
 
 
@@ -404,7 +434,7 @@ endfunction
 
 
 function! s:on_entering_submode(submode)  "{{{2
-  call s:set_up_options()
+  call s:set_up_options(a:submode)
   return ''
 endfunction
 
@@ -412,7 +442,8 @@ endfunction
 
 
 function! s:on_executing_action(submode)  "{{{2
-  if s:original_showmode && s:may_override_showmode_p(mode())
+  if (s:original_showmode || g:submode_always_show_submode)
+  \  && s:may_override_showmode_p(mode())
     echohl ModeMsg
     echo '-- Submode:' a:submode '--'
     echohl None
@@ -424,7 +455,8 @@ endfunction
 
 
 function! s:on_leaving_submode(submode)  "{{{2
-  if s:original_showmode && s:may_override_showmode_p(mode())
+  if (s:original_showmode || g:submode_always_show_submode)
+  \  && s:may_override_showmode_p(mode())
     if s:insert_mode_p(mode())
       let cussor_position = getpos('.')
     endif
@@ -462,11 +494,14 @@ function! s:restore_options()  "{{{2
   endif
   let s:options_overridden_p = 0
 
+  let &showcmd = s:original_showcmd
   let &showmode = s:original_showmode
   let &timeout = s:original_timeout
   let &timeoutlen = s:original_timeoutlen
   let &ttimeout = s:original_ttimeout
   let &ttimeoutlen = s:original_ttimeoutlen
+
+  let s:current_submode = ''
 
   return
 endfunction
@@ -474,18 +509,24 @@ endfunction
 
 
 
-function! s:set_up_options()  "{{{2
+function! s:set_up_options(submode)  "{{{2
   if s:options_overridden_p
     return
   endif
   let s:options_overridden_p = !0
 
+  let s:original_showcmd = &showcmd
   let s:original_showmode = &showmode
   let s:original_timeout = &timeout
   let s:original_timeoutlen = &timeoutlen
   let s:original_ttimeout = &ttimeout
   let s:original_ttimeoutlen = &ttimeoutlen
 
+  " NB: 'showcmd' must be enabled to render the cursor properly.
+  " If 'showcmd' is disabled and the current submode message is rendered, the
+  " cursor is rendered at the end of the message, not the actual position in
+  " the current window.  (gh-9)
+  set showcmd
   set noshowmode
   let &timeout = g:submode_timeout
   let &ttimeout = s:original_timeout ? !0 : s:original_ttimeout
@@ -493,6 +534,8 @@ function! s:set_up_options()  "{{{2
   let &ttimeoutlen = s:original_ttimeoutlen < 0
   \                  ? s:original_timeoutlen
   \                  : s:original_ttimeoutlen
+
+  let s:current_submode = a:submode
 
   return
 endfunction

@@ -1,8 +1,8 @@
 *submode.txt*	Create your own submodes
 
-Version 0.1.0
+Version 0.3.1
 Script ID: 2467
-Copyright (C) 2008-2013 kana <http://whileimautomaton.net/>
+Copyright (C) 2008-2014 kana <http://whileimautomaton.net/>
 License: MIT license  {{{
     Permission is hereby granted, free of charge, to any person obtaining
     a copy of this software and associated documentation files (the
@@ -96,6 +96,12 @@ COMMANDS					*submode-commands*
 ------------------------------------------------------------------------------
 FUNCTIONS					*submode-functions*
 
+						*submode#current()*
+submode#current()
+			Return the name of the current submode.  If any
+			submode is not currently active, return an empty
+			string instead.
+
 						*submode#enter_with()*
 submode#enter_with({submode}, {modes}, {options}, {lhs}, [{rhs}])
 			Define a key mapping to enter the {submode} from
@@ -123,6 +129,9 @@ submode#map({submode}, {modes}, {options}, {lhs}, {rhs})
 				Alphabets	A-Z, a-z
 				Digits		0-9
 				Some symbols	-, _, /
+
+				Note that the submode name is used as parts of
+				internal key mappings.  Use a short name.
 
 			{modes}		String
 				A sequence of letters which specifies the
@@ -192,6 +201,17 @@ submode#unmap({submode}, {modes}, {options}, {lhs})
 ------------------------------------------------------------------------------
 VARIABLES					*submode-variables*
 
+					       *g:submode_always_show_submode*
+g:submode_always_show_submode	boolean (default: false)
+	Show always the current submode, even if 'showmode' is disabled.
+	Use this option if you use vim-airline or vim-powerline.
+
+	'showmode'  g:submode_always_show_submode  the current submode ~
+	off         off                            not shown
+	on          off                            shown
+	off         on                             shown
+	on          on                             shown
+
 						*g:submode_keep_leaving_key*
 g:submode_keep_leaving_key	boolean (default: false)
 	Whenever you type any key which is not mapped in the current submode,
@@ -233,30 +253,56 @@ BUGS						*submode-bugs*
 
 LIMITATIONS ~
 
+- The maximum length of {lhs} of normal key mappings is 50.  Since submode key
+  mappings are built on top of normal key mappings, the maximum length of
+  a submode {lhs} is shorter than 50.  Usually 10 or more characters are
+  available, depending on a submode name.  And it is enough length because you
+  don't want to type 4 or more keys to execute a command.
+
 - In {rhs} of a key mapping for a submode, <SID> cannot be used.  Because key
   mappings for a submode is defined by this plugin, not callers.
 
 - To behave the same as Normal mode and Visual mode, any unbound key sequence
   should be ignored in a submode, but it's impossible to implement.
 
+- 'showcmd' is always turned on a submode to render the cursor properly.
+
+- If 'showcmd' is turned on and 'encoding' is set to a non-Unicode encoding,
+  ".........." is showed at the bottom right corner while a submode is active.
+  This is to hide a part of internal key mappings for submode key mappings.
+
 
 PROBLEMS ~
 
-- Missing [count] support in a submode.
+- [count] is not supported in a submode.
 
-- Unmap mappings for a submode properly.  The current inplementation just
-  replaces rhs with <Nop>, but it may cause some problems.
+- |submode#unmap()| does not actually unmap key mappings.  It just replaces
+  rhs with <Nop>, but it may cause some problems.
 
-- Add commands like |:map| and others to deal with submode mappings for
-  readability.
-
-- There are many bugs around the world.
+- The current API to define submode key mappings is somewhat low-level.
+  It might be useful to add |:map|-like commands for readability.
 
 
 
 
 ==============================================================================
 CHANGELOG					*submode-changelog*
+
+0.3.1	2014-02-16T18:59:21+09:00		*submode-changelog-0.3.1*
+	- Fix to hide unintended messages which were shown in the command line
+	  whenever users leave from a submode.
+
+0.3.0	2014-02-15T21:15:46+09:00		*submode-changelog-0.3.0*
+	- Add |submode#current()|.
+	- Tidy up the document a bit.
+
+0.2.0	2014-02-05T23:56:14+09:00		*submode-changelog-0.2.0*
+	- Add |g:submode_always_show_submode| for users preferring
+	  'statusline' such as vim-airline and vim-powerline.
+	- Fix a rendering problem on the cursor.  The problem was happened if
+	  'showcmd' is off and 'showmode' is on.
+	- Fix not to show internal key mappings in 'showcmd' area.
+	- Add a note about a limitation of {lhs} length.  See |submode-bugs|.
 
 0.1.0	2013-03-16T16:34:49+09:00		*submode-changelog-0.1.0*
 	- Allow to keep a key to leave from the current mode.
